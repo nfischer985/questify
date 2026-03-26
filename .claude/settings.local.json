@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)",
+      "Bash(timeout 90 npx next build)",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(gtimeout 90 npx next build)",
+      "Bash(npx next:*)",
+      "Bash(wait)",
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)",
+      "WebSearch",
+      "WebFetch(domain:www.findlatitudeandlongitude.com)",
+      "WebFetch(domain:naturalatlas.com)",
+      "WebFetch(domain:www.locationscout.net)",
+      "WebFetch(domain:www.alltrails.com)",
+      "WebFetch(domain:www.latlong.net)",
+      "WebFetch(domain:www.tampabaysnowbirder.com)",
+      "WebFetch(domain:elevation.maplogs.com)",
+      "WebFetch(domain:www.alltopsights.com)",
+      "WebFetch(domain:floridahikes.com)",
+      "WebFetch(domain:evendo.com)",
+      "WebFetch(domain:www.floridatrails.com)",
+      "WebFetch(domain:wanderlog.com)",
+      "WebFetch(domain:www.beachhunter.net)",
+      "Bash(node:*)",
+      "Bash(lsof -ti:3000)",
+      "Bash(xargs ls:*)",
+      "Bash(curl -s http://localhost:6767)",
+      "Bash(curl -s http://localhost:6767/_next/static/css/app/layout.css?v=1774299317788)",
+      "Bash(curl -s http://localhost:6767/_next/static/css/app/layout.css)",
+      "Bash(xargs kill:*)",
+      "Bash(ls:*)",
+      "Bash(find /Users/nurifischer/questify-web -type f -name *.rules -o -name firestore*)"
+    ]
+  }
+}

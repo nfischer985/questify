@@ -1,0 +1,127 @@
+'use client';
+import { useEffect, useRef, useState } from 'react';
+import { onAuthStateChanged, User } from 'firebase/auth';
+import { auth, initFirebaseAppCheck } from '@/lib/firebase';
+
+initFirebaseAppCheck();
+import { getProfileByUid } from '@/lib/userDb';
+import { subscribeToActivity } from '@/lib/activityDb';
+import { useGameStore } from '@/store/gameStore';
+import SignInScreen from './SignInScreen';
+import UsernameSetup from './UsernameSetup';
+
+function ActivityListener() {
+  const { friends, addActivityItem } = useGameStore();
+  const seenRef = useRef<Set<string>>(new Set());
+  const unsubsRef = useRef<(() => void)[]>([]);
+
+  useEffect(() => {
+    // Request notification permission once
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  useEffect(() => {
+    unsubsRef.current.forEach(u => u());
+    unsubsRef.current = [];
+
+    friends.forEach(friend => {
+      const unsub = subscribeToActivity(friend.id, items => {
+        items.forEach(item => {
+          const key = `${item.uid}-${item.timestamp}`;
+          if (seenRef.current.has(key)) return;
+          seenRef.current.add(key);
+          // Skip items older than 10 minutes (not truly "new")
+          if (Date.now() - item.timestamp > 10 * 60 * 1000) return;
+          addActivityItem(item);
+          if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            new Notification(`@${item.username} completed a quest!`, {
+              body: `${item.questTitle} · +${item.xpGained} XP`,
+              icon: '/favicon.ico',
+            });
+          }
+        });
+      });
+      unsubsRef.current.push(unsub);
+    });
+
+    return () => { unsubsRef.current.forEach(u => u()); };
+  }, [friends, addActivityItem]);
+
+  return null;
+}
+
+function AuthGateInner({ children }: { children: React.ReactNode }) {
+  const { userHandle, setUserHandle, setDisplayName, setAuthUid } = useGameStore();
+  const [firebaseUser, setFirebaseUser] = useState<User | null | 'loading'>('loading');
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        setFirebaseUser(null);
+        return;
+      }
+      setAuthUid(user.uid);
+      // If we already have a handle in store, use it
+      if (userHandle) {
+        setFirebaseUser(user);
+        return;
+      }
+      // Otherwise look up from Firestore
+      try {
+        const profile = await getProfileByUid(user.uid);
+        if (profile) {
+          setUserHandle(profile.username);
+          setDisplayName(profile.displayName);
+        }
+      } catch { /* offline — proceed, UsernameSetup will be skipped if handle exists */ }
+      setFirebaseUser(user);
+    });
+    return unsub;
+  }, [userHandle, setUserHandle, setDisplayName, setAuthUid]);
+
+  if (firebaseUser === 'loading') {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        height: '100dvh', background: 'var(--c-bg)',
+      }}>
+        <div style={{
+          width: 36, height: 36, borderRadius: '50%',
+          border: '3px solid rgba(16,185,129,0.2)', borderTopColor: 'var(--c-green)',
+          animation: 'spin 0.8s linear infinite',
+        }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  if (!firebaseUser) return <SignInScreen />;
+  if (!userHandle)   return <UsernameSetup firebaseUser={firebaseUser} />;
+
+  return <><ActivityListener />{children}</>;
+}
+
+export default function AuthGate({ children }: { children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
+  if (!mounted) {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        height: '100dvh', background: 'var(--c-bg)',
+      }}>
+        <div style={{
+          width: 36, height: 36, borderRadius: '50%',
+          border: '3px solid rgba(16,185,129,0.2)', borderTopColor: 'var(--c-green)',
+          animation: 'spin 0.8s linear infinite',
+        }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  return <AuthGateInner>{children}</AuthGateInner>;
+}
