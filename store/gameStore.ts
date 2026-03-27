@@ -65,7 +65,7 @@ interface GameState {
   buyShopItem: (itemId: string) => boolean;
   togglePremium: () => void;
   toggleGoldenRing: () => void;
-  addFriend: (username: string) => boolean;
+  addFriend: (username: string, uid: string) => boolean;
   removeFriend: (friendId: string) => void;
   setUsername: (name: string) => void;
   setTheme: (t: 'dark' | 'light') => void;
@@ -504,17 +504,12 @@ export const useGameStore = create<GameState>()(
         activeQuestTimers: {}, currentParty: null, questMode: 'solo',
       }),
 
-      addFriend: (username) => {
+      addFriend: (username, uid) => {
         const state = get();
         if (state.friends.find(f => f.username.toLowerCase() === username.toLowerCase())) return false;
         const newFriend: Friend = {
-          id: `f${Date.now()}`, username,
-          level: Math.floor(Math.random() * 15) + 1,
-          xp: Math.floor(Math.random() * 20000),
-          streak: Math.floor(Math.random() * 10),
-          questsCompleted: Math.floor(Math.random() * 200),
-          coins: Math.floor(Math.random() * 5000),
-          premium: Math.random() > 0.5,
+          id: uid, username,
+          level: 1, xp: 0, streak: 0, questsCompleted: 0, coins: 0, premium: false,
         };
         set({ friends: [...state.friends, newFriend] });
         return true;

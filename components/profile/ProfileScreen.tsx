@@ -13,6 +13,7 @@ import { CoinIcon } from '@/components/ui/CoinIcon';
 import { signOut as firebaseSignOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { getProfileByUsername } from '@/lib/userDb';
+import { validateDisplayName, validateChatMessage, validatePartyName, sanitizeText, CHAT_MSG_MAX, DISPLAY_NAME_MAX, PARTY_NAME_MAX } from '@/lib/validation';
 
 const AVATAR_COLORS = [
   '#10b981', '#059669', '#6366f1', '#8b5cf6', '#ec4899',
@@ -120,7 +121,7 @@ export default function ProfileScreen() {
         setTimeout(() => setFriendMsg(''), 3000);
         return;
       }
-      const ok = addFriend(profile.username);
+      const ok = addFriend(profile.username, profile.uid);
       setFriendMsg(ok ? `Added @${profile.username}!` : 'Already on your list.');
     } catch {
       setFriendMsg('Could not search. Try again.');
@@ -175,17 +176,31 @@ export default function ProfileScreen() {
     getActivity(viewFriend.id).then(setFriendActivity);
   }, [viewFriend]);
 
+  const [chatError, setChatError] = useState('');
+
   const handleSendChat = async () => {
     if (!chatInput.trim() || !currentParty || !authUid || !userHandle) return;
-    const text = chatInput.trim();
+    // Validate length before even attempting the send
+    const check = validateChatMessage(chatInput);
+    if (!check.ok) { setChatError(check.error ?? ''); setTimeout(() => setChatError(''), 3000); return; }
+    const text = sanitizeText(chatInput, CHAT_MSG_MAX);
     setChatInput('');
-    await sendChatMessage(currentParty.code, authUid, userHandle, text);
+    try {
+      await sendChatMessage(currentParty.code, authUid, userHandle, text);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Could not send message.';
+      setChatError(msg);
+      setTimeout(() => setChatError(''), 4000);
+    }
   };
 
   const handleJoinParty = async () => {
     if (!joinCodeInput.trim()) return;
+    const code = joinCodeInput.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+    const { validatePartyCode: vpc } = await import('@/lib/validation');
+    const codeCheck = vpc(code);
+    if (!codeCheck.ok) { setPartyMsg(codeCheck.error ?? 'Invalid code.'); setTimeout(() => setPartyMsg(''), 3000); return; }
     setJoiningParty(true);
-    const code = joinCodeInput.trim().toUpperCase();
     const party = await fetchParty(code);
     if (!party) {
       setPartyMsg('Party not found. Check the code and try again.');
@@ -360,7 +375,8 @@ export default function ProfileScreen() {
                   <input
                     value={nameInput}
                     onChange={e => setNameInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') { setUsername(nameInput); setDisplayName(nameInput); setEditing(false); } }}
+                    maxLength={DISPLAY_NAME_MAX}
+                    onKeyDown={e => { if (e.key === 'Enter') { const v = sanitizeText(nameInput, DISPLAY_NAME_MAX); if (validateDisplayName(v).ok) { setUsername(v); setDisplayName(v); setEditing(false); } } }}
                     autoFocus
                     style={{
                       flex: 1, padding: '6px 10px', borderRadius: 8,
@@ -370,7 +386,7 @@ export default function ProfileScreen() {
                     }}
                   />
                   <button
-                    onClick={() => { setUsername(nameInput); setDisplayName(nameInput); setEditing(false); }}
+                    onClick={() => { const v = sanitizeText(nameInput, DISPLAY_NAME_MAX); if (validateDisplayName(v).ok) { setUsername(v); setDisplayName(v); setEditing(false); } }}
                     style={{
                       padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
                       background: 'var(--c-green)', color: 'white', fontWeight: 700, fontSize: 12, fontFamily: 'inherit',
@@ -581,11 +597,17 @@ export default function ProfileScreen() {
                   }
                   <div ref={chatEndRef} />
                 </div>
+                {chatError && (
+                  <div style={{ padding: '4px 12px', fontSize: 12, color: '#ef4444', fontWeight: 600 }}>
+                    {chatError}
+                  </div>
+                )}
                 <div style={{ display: 'flex', borderTop: '1px solid var(--c-border)', padding: '8px' }}>
                   <input
                     value={chatInput}
-                    onChange={e => setChatInput(e.target.value)}
+                    onChange={e => setChatInput(e.target.value.slice(0, CHAT_MSG_MAX))}
                     onKeyDown={e => e.key === 'Enter' && handleSendChat()}
+                    maxLength={CHAT_MSG_MAX}
                     placeholder="Type a message…"
                     style={{
                       flex: 1, padding: '8px 12px', background: 'var(--c-input)',
@@ -622,15 +644,18 @@ export default function ProfileScreen() {
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input
                     value={partyNameInput}
-                    onChange={e => setPartyNameInput(e.target.value)}
+                    onChange={e => setPartyNameInput(e.target.value.slice(0, PARTY_NAME_MAX))}
                     onKeyDown={e => {
-                      if (e.key === 'Enter' && partyNameInput.trim()) {
-                        const p = createParty(partyNameInput.trim());
+                      if (e.key === 'Enter') {
+                        const name = sanitizeText(partyNameInput, PARTY_NAME_MAX);
+                        if (!validatePartyName(name).ok) return;
+                        const p = createParty(name);
                         saveParty(p);
                         setPartyNameInput('');
                       }
                     }}
                     placeholder="Party name..."
+                    maxLength={PARTY_NAME_MAX}
                     style={{
                       flex: 1, padding: '10px 14px', borderRadius: 10,
                       background: 'var(--c-input)', border: '1px solid var(--c-border)',
@@ -639,8 +664,9 @@ export default function ProfileScreen() {
                   />
                   <button
                     onClick={() => {
-                      if (!partyNameInput.trim()) return;
-                      const p = createParty(partyNameInput.trim());
+                      const name = sanitizeText(partyNameInput, PARTY_NAME_MAX);
+                      if (!validatePartyName(name).ok) return;
+                      const p = createParty(name);
                       saveParty(p);
                       setPartyNameInput('');
                     }}

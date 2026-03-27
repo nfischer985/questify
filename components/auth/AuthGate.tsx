@@ -6,6 +6,7 @@ import { auth, initFirebaseAppCheck } from '@/lib/firebase';
 initFirebaseAppCheck();
 import { getProfileByUid } from '@/lib/userDb';
 import { subscribeToActivity } from '@/lib/activityDb';
+import { upsertLeaderboardEntry, computeTotalXp } from '@/lib/leaderboardDb';
 import { useGameStore } from '@/store/gameStore';
 import SignInScreen from './SignInScreen';
 import UsernameSetup from './UsernameSetup';
@@ -48,6 +49,32 @@ function ActivityListener() {
 
     return () => { unsubsRef.current.forEach(u => u()); };
   }, [friends, addActivityItem]);
+
+  return null;
+}
+
+function LeaderboardSync() {
+  const {
+    authUid, username, displayName, level, xp, coins, streak,
+    totalQuestsCompleted, weeklyQuestsCompleted, premium, avatarUrl,
+  } = useGameStore();
+
+  useEffect(() => {
+    if (!authUid || !username) return;
+    upsertLeaderboardEntry(authUid, {
+      username,
+      displayName: displayName || username,
+      level,
+      xp,
+      totalXp: computeTotalXp(level, xp),
+      coins,
+      streak,
+      questsCompleted: totalQuestsCompleted,
+      weeklyQuestsCompleted,
+      premium,
+      avatarUrl: avatarUrl ?? null,
+    }).catch(() => {});
+  }, [authUid, username, displayName, level, xp, coins, streak, totalQuestsCompleted, weeklyQuestsCompleted, premium, avatarUrl]);
 
   return null;
 }
@@ -100,7 +127,7 @@ function AuthGateInner({ children }: { children: React.ReactNode }) {
   if (!firebaseUser) return <SignInScreen />;
   if (!userHandle)   return <UsernameSetup firebaseUser={firebaseUser} />;
 
-  return <><ActivityListener />{children}</>;
+  return <><ActivityListener /><LeaderboardSync />{children}</>;
 }
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {

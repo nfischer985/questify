@@ -11,5 +11,9 @@
       "static/css/_app-pages-browser_components_map_MapComponent_tsx.css",
       "static/chunks/_app-pages-browser_components_map_MapComponent_tsx.js"
     ]
+  },
+  "components/profile/ProfileScreen.tsx -> @/lib/validation": {
+    "id": "components/profile/ProfileScreen.tsx -> @/lib/validation",
+    "files": []
   }
 }

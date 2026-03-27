@@ -33,7 +33,17 @@
       "Bash(curl -s http://localhost:6767/_next/static/css/app/layout.css)",
       "Bash(xargs kill:*)",
       "Bash(ls:*)",
-      "Bash(find /Users/nurifischer/questify-web -type f -name *.rules -o -name firestore*)"
+      "Bash(find /Users/nurifischer/questify-web -type f -name *.rules -o -name firestore*)",
+      "Bash(find /Users/nurifischer/questify-web/app -type f \\\\\\(-name *.tsx -o -name *.ts -o -name *.jsx -o -name *.js \\\\\\))",
+      "Bash(find /Users/nurifischer/questify-web -type d -name *leaderboard* -o -type d -name *auth* -o -type d -name *api*)",
+      "Bash(find /Users/nurifischer/questify-web/lib -type f -name *.ts -o -name *.tsx)",
+      "Bash(find /Users/nurifischer/questify-web/app -type f -name *.ts -o -name *.tsx)",
+      "Bash(find /Users/nurifischer/questify-web/store -type f -name *.ts -o -name *.tsx)",
+      "Bash(grep -r \"websocket\\\\|onSnapshot\\\\|realtime\\\\|subscription\\\\|onValue\\\\|listen\" /Users/nurifischer/questify-web --include=*.ts --include=*.tsx)",
+      "Bash(find /Users/nurifischer/questify-web -type f \\\\\\(-name *.ts -o -name *.tsx \\\\\\) -path */api/*)",
+      "Bash(find /Users/nurifischer/questify-web -type f \\\\\\(-name *.rules -o -name firestore.* -o -name *schema* \\\\\\))",
+      "Bash(grep -r \"Friend\\\\|addFriend\" /Users/nurifischer/questify-web/store --include=*.ts)",
+      "Bash(find /Users/nurifischer/questify-web -name *.rules -o -name firestore* -o -name storage.rules)"
     ]
   }
 }
