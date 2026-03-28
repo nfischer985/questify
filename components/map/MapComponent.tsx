@@ -102,14 +102,33 @@ const makeUserPin = () => L.divIcon({
 
 const CENTER: [number, number] = [28.0784, -82.7810];
 
-const COIN_DROPS = [
-  { id:'cd1', lat:28.0121, lng:-82.7898, amt:25, name:'Downtown Dunedin (Main St & Broadway)' },
-  { id:'cd2', lat:27.9891, lng:-82.6862, amt:18, name:'Safety Harbor Waterfront Park' },
-  { id:'cd3', lat:27.9774, lng:-82.8302, amt:30, name:'Pier 60, Clearwater Beach' },
-  { id:'cd4', lat:28.0074, lng:-82.6795, amt:20, name:'Philippe Park, Safety Harbor' },
-  { id:'cd5', lat:28.1530, lng:-82.7992, amt:35, name:'Fred Howard Park Beach' },
-  { id:'cd6', lat:28.1557, lng:-82.7610, amt:22, name:'Sponge Docks, Tarpon Springs' },
-];
+const COIN_AMOUNTS = [18, 20, 22, 25, 28, 30, 35];
+
+function generateCoinDrops(lat: number, lng: number) {
+  // 1° latitude ≈ 69 miles, 1° longitude ≈ 69 * cos(lat) miles
+  const milesPerDegLat = 69;
+  const milesPerDegLng = 69 * Math.cos((lat * Math.PI) / 180);
+
+  // Seeded pseudo-random so coins don't jump on every render
+  let seed = Math.floor(lat * 1000) * 1000000 + Math.floor(lng * 1000);
+  const rand = () => {
+    seed = (seed * 1664525 + 1013904223) & 0xffffffff;
+    return (seed >>> 0) / 0xffffffff;
+  };
+
+  return Array.from({ length: 6 }, (_, i) => {
+    // Random angle and distance between 1.5–3.5 miles
+    const angle = rand() * Math.PI * 2;
+    const miles = 1.5 + rand() * 2.0;
+    return {
+      id: `cd${i + 1}`,
+      lat: lat + (miles / milesPerDegLat) * Math.sin(angle),
+      lng: lng + (miles / milesPerDegLng) * Math.cos(angle),
+      amt: COIN_AMOUNTS[Math.floor(rand() * COIN_AMOUNTS.length)],
+      name: 'Nearby coin drop',
+    };
+  });
+}
 
 // ── Routing types ────────────────────────────────────────────────────────────
 interface NavStep {
@@ -399,13 +418,18 @@ export default function MapComponent() {
   const urbexFetched = useRef(false);
 
   const userPosRef = useRef<[number, number] | null>(null);
+  const [coinDrops, setCoinDrops] = useState(() => generateCoinDrops(CENTER[0], CENTER[1]));
   const [navTarget, setNavTarget] = useState<NavTarget | null>(null);
   const [navRoute,  setNavRoute]  = useState<NavRoute  | null>(null);
   const [navLoading, setNavLoading] = useState(false);
   const [navError,   setNavError]   = useState<string | null>(null);
 
   const handleLocationUpdate = useCallback((pos: [number, number]) => {
+    const first = userPosRef.current === null;
     userPosRef.current = pos;
+    if (first) {
+      setCoinDrops(generateCoinDrops(pos[0], pos[1]));
+    }
   }, []);
 
   const startNavigation = useCallback(async (
@@ -718,7 +742,7 @@ export default function MapComponent() {
                 </Marker>
               </React.Fragment>
             ))}
-            {COIN_DROPS.map(c => (
+            {coinDrops.map(c => (
               <Marker key={c.id} position={[c.lat, c.lng]} icon={makeCoinPin(c.amt)}>
                 <Popup>
                   <div style={{ padding:'12px 14px' }}>
