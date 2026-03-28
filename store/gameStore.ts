@@ -570,6 +570,13 @@ export const useGameStore = create<GameState>()(
       removeFriend: (friendId) => set(s => ({ friends: s.friends.filter(f => f.id !== friendId) })),
       setUsername: (name) => set({ username: name }),
     }),
-    { name: 'questify-v6' }
+    {
+      name: 'questify-v6',
+      partialize: (state) => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { questsGenerating, ...rest } = state;
+        return rest;
+      },
+    }
   )
 );
