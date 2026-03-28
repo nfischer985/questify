@@ -481,6 +481,24 @@ export default function QuestList() {
         {allDone && <p style={{ fontSize: 12, color: 'var(--c-gold)', marginTop: 8, textAlign: 'center', fontWeight: 700 }}>🔥 Streak maintained! New quests loading…</p>}
       </div>
 
+      {/* Premium regen button */}
+      {premium && questMode === 'solo' && (
+        <button
+          onClick={() => refreshWeeklyQuests()}
+          disabled={questsGenerating}
+          style={{
+            width: '100%', marginBottom: 14, padding: '11px 0', borderRadius: 12, border: '1px solid rgba(245,158,11,0.3)',
+            background: 'rgba(245,158,11,0.08)', color: '#f59e0b',
+            fontWeight: 700, fontSize: 13, cursor: questsGenerating ? 'not-allowed' : 'pointer',
+            fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            opacity: questsGenerating ? 0.5 : 1,
+          }}
+        >
+          <RefreshCw size={13} style={questsGenerating ? { animation: 'spin 1s linear infinite' } : undefined} />
+          {questsGenerating ? 'Generating…' : '✨ Regenerate Quests'}
+        </button>
+      )}
+
       {/* Difficulty summary pills */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
         {(['easy','medium','hard'] as const).map(diff => {
