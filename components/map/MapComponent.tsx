@@ -104,30 +104,45 @@ const CENTER: [number, number] = [28.0784, -82.7810];
 
 const COIN_AMOUNTS = [18, 20, 22, 25, 28, 30, 35];
 
-function generateCoinDrops(lat: number, lng: number) {
-  // 1° latitude ≈ 69 miles, 1° longitude ≈ 69 * cos(lat) miles
+interface CoinDrop { id: string; lat: number; lng: number; amt: number; name: string; }
+
+async function generateCoinDropsNearUser(lat: number, lng: number): Promise<CoinDrop[]> {
   const milesPerDegLat = 69;
   const milesPerDegLng = 69 * Math.cos((lat * Math.PI) / 180);
 
-  // Seeded pseudo-random so coins don't jump on every render
-  let seed = Math.floor(lat * 1000) * 1000000 + Math.floor(lng * 1000);
-  const rand = () => {
-    seed = (seed * 1664525 + 1013904223) & 0xffffffff;
-    return (seed >>> 0) / 0xffffffff;
-  };
-
-  return Array.from({ length: 6 }, (_, i) => {
-    // Random angle and distance between 1.5–3.5 miles
-    const angle = rand() * Math.PI * 2;
-    const miles = 1.5 + rand() * 2.0;
+  // Spread 6 coins evenly around a circle with a random offset per coin
+  const candidates = Array.from({ length: 6 }, (_, i) => {
+    const baseAngle = (i / 6) * Math.PI * 2;
+    const jitter = (Math.random() - 0.5) * (Math.PI / 3);
+    const angle = baseAngle + jitter;
+    const miles = 0.25 + Math.random() * 0.55; // 0.25 – 0.8 miles
     return {
-      id: `cd${i + 1}`,
       lat: lat + (miles / milesPerDegLat) * Math.sin(angle),
       lng: lng + (miles / milesPerDegLng) * Math.cos(angle),
-      amt: COIN_AMOUNTS[Math.floor(rand() * COIN_AMOUNTS.length)],
-      name: 'Nearby coin drop',
     };
   });
+
+  // Snap each candidate to the nearest drivable road via OSRM
+  const drops = await Promise.all(candidates.map(async (c, i) => {
+    try {
+      const res = await fetch(
+        `https://router.project-osrm.org/nearest/v1/driving/${c.lng},${c.lat}?number=1`
+      );
+      const data = await res.json();
+      const wp = data.waypoints?.[0];
+      return {
+        id: `cd${i + 1}`,
+        lat: wp?.location[1] ?? c.lat,
+        lng: wp?.location[0] ?? c.lng,
+        amt: COIN_AMOUNTS[i % COIN_AMOUNTS.length],
+        name: 'Nearby coin drop',
+      };
+    } catch {
+      return { id: `cd${i + 1}`, lat: c.lat, lng: c.lng, amt: COIN_AMOUNTS[i % COIN_AMOUNTS.length], name: 'Nearby coin drop' };
+    }
+  }));
+
+  return drops;
 }
 
 // ── Routing types ────────────────────────────────────────────────────────────
@@ -418,7 +433,7 @@ export default function MapComponent() {
   const urbexFetched = useRef(false);
 
   const userPosRef = useRef<[number, number] | null>(null);
-  const [coinDrops, setCoinDrops] = useState(() => generateCoinDrops(CENTER[0], CENTER[1]));
+  const [coinDrops, setCoinDrops] = useState<CoinDrop[]>([]);
   const [navTarget, setNavTarget] = useState<NavTarget | null>(null);
   const [navRoute,  setNavRoute]  = useState<NavRoute  | null>(null);
   const [navLoading, setNavLoading] = useState(false);
@@ -428,7 +443,7 @@ export default function MapComponent() {
     const first = userPosRef.current === null;
     userPosRef.current = pos;
     if (first) {
-      setCoinDrops(generateCoinDrops(pos[0], pos[1]));
+      generateCoinDropsNearUser(pos[0], pos[1]).then(setCoinDrops).catch(() => {});
     }
   }, []);
 
