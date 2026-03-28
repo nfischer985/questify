@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Quest, ShopItem, Friend, CompletedQuest, CoinDrop, Party, ActiveQuestTimer, QuestMode, ActivityItem } from '@/types';
+import { getUserQuests } from '@/lib/questsDb';
+import { getIdToken } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 
 interface GameState {
   username: string;
@@ -33,6 +36,9 @@ interface GameState {
   authUid: string | null;
   userHandle: string | null;   // permanent @username, set once
   displayName: string;         // changeable display name
+  userLat: number | null;
+  userLng: number | null;
+  rateLimitedUntil: number | null;
 
   avatarUrl: string | null;
   setAvatarUrl: (url: string | null) => void;
@@ -55,12 +61,14 @@ interface GameState {
   setAuthUid: (uid: string) => void;
   setUserHandle: (handle: string) => void;
   setDisplayName: (name: string) => void;
+  setUserLocation: (lat: number, lng: number) => void;
   setActiveTab: (tab: string) => void;
   setQuestMode: (mode: QuestMode) => void;
   completeQuest: (questId: string, photoUrl?: string, duration?: number, timerBonus?: boolean) => { xpGained: number; coinsGained: number; newLevel: number };
   completeGroupQuest: (questId: string, photoUrl?: string, duration?: number, timerBonus?: boolean) => { xpGained: number; coinsGained: number; newLevel: number };
   completeEventQuest: (questId: string, title: string, difficulty: string, xpReward: number, coinReward: number, photoUrl?: string) => { xpGained: number; coinsGained: number; newLevel: number };
-  refreshWeeklyQuests: () => void;
+  refreshWeeklyQuests: () => Promise<void>;
+  loadUserQuests: (uid: string) => Promise<boolean>;
   collectCoinDrop: (coinId: string) => number;
   buyShopItem: (itemId: string) => boolean;
   togglePremium: () => void;
@@ -204,6 +212,9 @@ export const useGameStore = create<GameState>()(
       authUid: null,
       userHandle: null,
       displayName: '',
+      userLat: null,
+      userLng: null,
+      rateLimitedUntil: null,
       level: 1,
       xp: 0,
       xpToNextLevel: XP_PER_LEVEL(1),
@@ -214,10 +225,10 @@ export const useGameStore = create<GameState>()(
       premium: false,
       showGoldenRing: false,
       activeTab: 'home',
-      weeklyQuests: INITIAL_QUESTS,
-      duoQuests: INITIAL_DUO_QUESTS,
-      trioQuests: INITIAL_TRIO_QUESTS,
-      squadQuests: INITIAL_SQUAD_QUESTS,
+      weeklyQuests: [],
+      duoQuests: [],
+      trioQuests: [],
+      squadQuests: [],
       questMode: 'solo',
       completedQuestLog: [],
       shopItems: INITIAL_SHOP_ITEMS,
@@ -246,6 +257,7 @@ export const useGameStore = create<GameState>()(
       setAuthUid: (authUid) => set({ authUid }),
       setUserHandle: (userHandle) => set({ userHandle }),
       setDisplayName: (displayName) => set({ displayName }),
+      setUserLocation: (userLat, userLng) => set({ userLat, userLng }),
       setActiveTab: (tab) => set({ activeTab: tab }),
       setQuestMode: (questMode) => set({ questMode }),
 
@@ -392,10 +404,44 @@ export const useGameStore = create<GameState>()(
         return true;
       },
 
-      refreshWeeklyQuests: () => set(() => ({
-        weeklyQuests: INITIAL_QUESTS.map(q => ({ ...q, completed: false })),
-        weeklyQuestsCompleted: 0,
-      })),
+      loadUserQuests: async (uid: string) => {
+        const data = await getUserQuests(uid);
+        if (!data) return false;
+        set({
+          weeklyQuests: data.solo,
+          duoQuests: data.duo,
+          trioQuests: data.trio,
+          squadQuests: data.squad,
+        });
+        return true;
+      },
+
+      refreshWeeklyQuests: async () => {
+        const state = get();
+        if (!state.authUid || !state.userLat || !state.userLng) return;
+
+        try {
+          const token = await getIdToken(auth.currentUser!);
+          const res = await fetch('/api/generate-quests', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lat: state.userLat, lng: state.userLng }),
+          });
+
+          if (res.status === 429) {
+            const { retryAfter } = await res.json();
+            set({ rateLimitedUntil: retryAfter });
+            return;
+          }
+
+          if (!res.ok) return;
+
+          set({ rateLimitedUntil: null, weeklyQuestsCompleted: 0 });
+          await get().loadUserQuests(state.authUid);
+        } catch {
+          // Silently fail — user keeps current quests
+        }
+      },
 
       startQuestTimer: (questId, mode, targetMs) => set(s => ({
         activeQuestTimers: {
@@ -490,19 +536,21 @@ export const useGameStore = create<GameState>()(
         });
       },
 
-      resetProgress: () => set({
-        level: 1, xp: 0, xpToNextLevel: XP_PER_LEVEL(1), coins: 100,
-        streak: 0, weeklyQuestsCompleted: 0, totalQuestsCompleted: 0,
-        weeklyQuests: INITIAL_QUESTS.map(q => ({ ...q, completed: false })),
-        duoQuests: INITIAL_DUO_QUESTS.map(q => ({ ...q, completed: false })),
-        trioQuests: INITIAL_TRIO_QUESTS.map(q => ({ ...q, completed: false })),
-        squadQuests: INITIAL_SQUAD_QUESTS.map(q => ({ ...q, completed: false })),
-        completedQuestLog: [], completedEventQuests: [],
-        shopItems: INITIAL_SHOP_ITEMS,
-        xpBoostActive: false, coinBoostActive: false, streakFrozen: false,
-        premium: false, showGoldenRing: false,
-        activeQuestTimers: {}, currentParty: null, questMode: 'solo',
-      }),
+      resetProgress: () => {
+        set({
+          level: 1, xp: 0, xpToNextLevel: XP_PER_LEVEL(1), coins: 100,
+          streak: 0, weeklyQuestsCompleted: 0, totalQuestsCompleted: 0,
+          weeklyQuests: [], duoQuests: [], trioQuests: [], squadQuests: [],
+          completedQuestLog: [], completedEventQuests: [],
+          shopItems: INITIAL_SHOP_ITEMS,
+          xpBoostActive: false, coinBoostActive: false, streakFrozen: false,
+          premium: false, showGoldenRing: false,
+          activeQuestTimers: {}, currentParty: null, questMode: 'solo',
+        });
+        // reload fresh quests from Firestore after reset
+        const uid = get().authUid;
+        if (uid) get().loadUserQuests(uid).catch(() => {});
+      },
 
       addFriend: (username, uid) => {
         const state = get();

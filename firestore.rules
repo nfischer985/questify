@@ -95,6 +95,21 @@ service cloud.firestore {
       allow write: if isAuthed() && partyCode.size() == 6;
     }
 
+    // ── /questTemplates/{id} ─────────────────────────────────────────────────
+    // Admin-curated templates. Read-only for all authenticated users.
+    match /questTemplates/{id} {
+      allow read: if isAuthed();
+      allow write: if false;
+    }
+
+    // ── /userQuests/{uid} ────────────────────────────────────────────────────
+    // LLM-generated quests per user. Only the owner can read their own quests.
+    // Write is handled server-side (API route with Admin SDK), not from client.
+    match /userQuests/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if false;
+    }
+
     // ── Catch-all: deny everything else ──────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;

@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { onAuthStateChanged, signOut, User } from 'firebase/auth';
+import { onAuthStateChanged, signOut, getIdToken, User } from 'firebase/auth';
 import { auth, initFirebaseAppCheck } from '@/lib/firebase';
 
 const ALLOWED_EMAILS = [
@@ -86,7 +86,7 @@ function LeaderboardSync() {
 }
 
 function AuthGateInner({ children }: { children: React.ReactNode }) {
-  const { userHandle, setUserHandle, setDisplayName, setAuthUid } = useGameStore();
+  const { userHandle, setUserHandle, setDisplayName, setAuthUid, setUserLocation, loadUserQuests, weeklyQuests } = useGameStore();
   const [firebaseUser, setFirebaseUser] = useState<User | null | 'loading' | 'denied'>('loading');
 
   useEffect(() => {
@@ -101,6 +101,25 @@ function AuthGateInner({ children }: { children: React.ReactNode }) {
         return;
       }
       setAuthUid(user.uid);
+      // Load or generate quests if not in local state
+      if (weeklyQuests.length === 0) {
+        const hasQuests = await loadUserQuests(user.uid).catch(() => false);
+        if (!hasQuests) {
+          // First time: get GPS then generate
+          navigator.geolocation?.getCurrentPosition(async pos => {
+            setUserLocation(pos.coords.latitude, pos.coords.longitude);
+            try {
+              const token = await getIdToken(user);
+              await fetch('/api/generate-quests', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+              });
+              await loadUserQuests(user.uid);
+            } catch { /* silently fail */ }
+          }, () => { /* GPS denied — quests stay empty until user grants permission */ });
+        }
+      }
       // If we already have a handle in store, use it
       if (userHandle) {
         setFirebaseUser(user);

@@ -113,6 +113,17 @@ export interface ChatMessage {
   createdAt: number;
 }
 
+export interface QuestTemplate {
+  id: string;
+  mode: QuestMode;
+  difficulty: Difficulty;
+  category: string;
+  hint: string;
+  xpReward: number;
+  coinReward: number;
+  active: boolean;
+}
+
 export interface CoinDrop {
   id: string;
   lat: number;
