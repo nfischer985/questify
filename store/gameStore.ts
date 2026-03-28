@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Quest, ShopItem, Friend, CompletedQuest, CoinDrop, Party, ActiveQuestTimer, QuestMode, ActivityItem } from '@/types';
 import { getUserQuests } from '@/lib/questsDb';
+import { getLocation } from '@/lib/geolocation';
 import { getIdToken } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 
@@ -422,14 +423,26 @@ export const useGameStore = create<GameState>()(
 
       refreshWeeklyQuests: async () => {
         const state = get();
-        if (!state.authUid || !state.userLat || !state.userLng) return;
+        if (!state.authUid) return;
 
+        set({ questsGenerating: true });
         try {
+          let lat = state.userLat;
+          let lng = state.userLng;
+
+          // Fetch location if not already known
+          if (!lat || !lng) {
+            const loc = await getLocation();
+            lat = loc.lat;
+            lng = loc.lng;
+            set({ userLat: lat, userLng: lng });
+          }
+
           const token = await getIdToken(auth.currentUser!);
           const res = await fetch('/api/generate-quests', {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ lat: state.userLat, lng: state.userLng }),
+            body: JSON.stringify({ lat, lng }),
           });
 
           if (res.status === 429) {
@@ -444,6 +457,8 @@ export const useGameStore = create<GameState>()(
           await get().loadUserQuests(state.authUid);
         } catch {
           // Silently fail — user keeps current quests
+        } finally {
+          set({ questsGenerating: false });
         }
       },
 
@@ -574,7 +589,7 @@ export const useGameStore = create<GameState>()(
       name: 'questify-v6',
       partialize: (state) => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { questsGenerating, ...rest } = state;
+        const { questsGenerating, rateLimitedUntil, userLat, userLng, ...rest } = state;
         return rest;
       },
     }

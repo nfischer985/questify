@@ -34,8 +34,11 @@ export async function POST(req: NextRequest) {
 
   const isPremium = lbSnap.data()?.premium ?? false;
   const lastRegenAt: number | undefined = userQuestsSnap.data()?.lastRegenAt;
+  const existingSolo: unknown[] = userQuestsSnap.data()?.solo ?? [];
+  const hasNoQuests = !userQuestsSnap.exists || existingSolo.length === 0;
 
-  if (!isPremium && lastRegenAt) {
+  // Skip rate limit if the user has no quests (first generation or after a reset)
+  if (!isPremium && !hasNoQuests && lastRegenAt) {
     const elapsed = Date.now() - lastRegenAt;
     if (elapsed < REGEN_COOLDOWN_MS) {
       return NextResponse.json(
