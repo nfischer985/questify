@@ -10,6 +10,64 @@ const ALLOWED_EMAILS = [
 ];
 
 initFirebaseAppCheck();
+
+async function generateQuestsForUser(user: User) {
+  const { setUserLocation, setQuestsGenerating, loadUserQuests } = useGameStore.getState();
+  setQuestsGenerating(true);
+
+  try {
+    // Try GPS first, fall back to IP geolocation
+    const { lat, lng } = await getLocation();
+    setUserLocation(lat, lng);
+
+    const token = await getIdToken(user);
+    const res = await fetch('/api/generate-quests', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat, lng }),
+    });
+
+    if (res.ok) {
+      await loadUserQuests(user.uid);
+    }
+  } catch {
+    // Generation failed silently — user will see retry button
+  } finally {
+    setQuestsGenerating(false);
+  }
+}
+
+function getLocation(): Promise<{ lat: number; lng: number }> {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) { reject(new Error('no geolocation')); return; }
+
+    const timeout = setTimeout(async () => {
+      // GPS timed out — fall back to IP geolocation
+      try {
+        const res = await fetch('https://ipapi.co/json/');
+        const geo = await res.json();
+        if (geo.latitude && geo.longitude) resolve({ lat: geo.latitude, lng: geo.longitude });
+        else reject(new Error('ip geo failed'));
+      } catch { reject(new Error('ip geo failed')); }
+    }, 8000);
+
+    navigator.geolocation.getCurrentPosition(
+      pos => { clearTimeout(timeout); resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }); },
+      async () => {
+        clearTimeout(timeout);
+        // GPS denied — try IP geolocation
+        try {
+          const res = await fetch('https://ipapi.co/json/');
+          const geo = await res.json();
+          if (geo.latitude && geo.longitude) resolve({ lat: geo.latitude, lng: geo.longitude });
+          else reject(new Error('ip geo failed'));
+        } catch { reject(new Error('all geo failed')); }
+      },
+      { timeout: 7000 }
+    );
+  });
+}
+
 import { getProfileByUid } from '@/lib/userDb';
 import { subscribeToActivity } from '@/lib/activityDb';
 import { upsertLeaderboardEntry, computeTotalXp } from '@/lib/leaderboardDb';
@@ -86,7 +144,7 @@ function LeaderboardSync() {
 }
 
 function AuthGateInner({ children }: { children: React.ReactNode }) {
-  const { userHandle, setUserHandle, setDisplayName, setAuthUid, setUserLocation, loadUserQuests, weeklyQuests } = useGameStore();
+  const { userHandle, setUserHandle, setDisplayName, setAuthUid, setUserLocation, loadUserQuests, setQuestsGenerating } = useGameStore();
   const [firebaseUser, setFirebaseUser] = useState<User | null | 'loading' | 'denied'>('loading');
 
   useEffect(() => {
@@ -101,23 +159,13 @@ function AuthGateInner({ children }: { children: React.ReactNode }) {
         return;
       }
       setAuthUid(user.uid);
-      // Load or generate quests if not in local state
-      if (weeklyQuests.length === 0) {
-        const hasQuests = await loadUserQuests(user.uid).catch(() => false);
-        if (!hasQuests) {
-          // First time: get GPS then generate
-          navigator.geolocation?.getCurrentPosition(async pos => {
-            setUserLocation(pos.coords.latitude, pos.coords.longitude);
-            try {
-              const token = await getIdToken(user);
-              await fetch('/api/generate-quests', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-              });
-              await loadUserQuests(user.uid);
-            } catch { /* silently fail */ }
-          }, () => { /* GPS denied — quests stay empty until user grants permission */ });
+
+      // Use getState() to avoid stale closure
+      const hasLocalQuests = useGameStore.getState().weeklyQuests.length > 0;
+      if (!hasLocalQuests) {
+        const hasFirestoreQuests = await loadUserQuests(user.uid).catch(() => false);
+        if (!hasFirestoreQuests) {
+          generateQuestsForUser(user);
         }
       }
       // If we already have a handle in store, use it

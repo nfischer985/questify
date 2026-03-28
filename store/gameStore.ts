@@ -39,6 +39,7 @@ interface GameState {
   userLat: number | null;
   userLng: number | null;
   rateLimitedUntil: number | null;
+  questsGenerating: boolean;
 
   avatarUrl: string | null;
   setAvatarUrl: (url: string | null) => void;
@@ -62,6 +63,7 @@ interface GameState {
   setUserHandle: (handle: string) => void;
   setDisplayName: (name: string) => void;
   setUserLocation: (lat: number, lng: number) => void;
+  setQuestsGenerating: (v: boolean) => void;
   setActiveTab: (tab: string) => void;
   setQuestMode: (mode: QuestMode) => void;
   completeQuest: (questId: string, photoUrl?: string, duration?: number, timerBonus?: boolean) => { xpGained: number; coinsGained: number; newLevel: number };
@@ -215,6 +217,7 @@ export const useGameStore = create<GameState>()(
       userLat: null,
       userLng: null,
       rateLimitedUntil: null,
+      questsGenerating: false,
       level: 1,
       xp: 0,
       xpToNextLevel: XP_PER_LEVEL(1),
@@ -258,6 +261,7 @@ export const useGameStore = create<GameState>()(
       setUserHandle: (userHandle) => set({ userHandle }),
       setDisplayName: (displayName) => set({ displayName }),
       setUserLocation: (userLat, userLng) => set({ userLat, userLng }),
+      setQuestsGenerating: (questsGenerating) => set({ questsGenerating }),
       setActiveTab: (tab) => set({ activeTab: tab }),
       setQuestMode: (questMode) => set({ questMode }),
 

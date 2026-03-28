@@ -211,7 +211,7 @@ export default function QuestList() {
     premium, setActiveTab, hideCompleted, compactCards,
     questMode, setQuestMode,
     activeQuestTimers, startQuestTimer, cancelQuestTimer,
-    authUid, userHandle,
+    authUid, userHandle, questsGenerating, rateLimitedUntil,
   } = useGameStore();
 
   const [levelUpMsg, setLevelUpMsg]   = useState<string | null>(null);
@@ -312,6 +312,42 @@ export default function QuestList() {
   };
 
   const visibleQuests = hideCompleted ? currentQuests.filter(q => !q.completed) : currentQuests;
+
+  if (questsGenerating) return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: 16, padding: 24 }}>
+      <div style={{ width: 40, height: 40, borderRadius: '50%', border: '3px solid rgba(16,185,129,0.2)', borderTopColor: 'var(--c-green)', animation: 'spin 0.8s linear infinite' }} />
+      <p style={{ color: 'var(--c-text)', fontWeight: 700, fontSize: 16 }}>Generating your quests…</p>
+      <p style={{ color: 'var(--c-text-muted)', fontSize: 13, textAlign: 'center' }}>Claude is finding real places near you. This takes about 15 seconds.</p>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+
+  if (weeklyQuests.length === 0 && !questsGenerating) {
+    const isRateLimited = rateLimitedUntil && rateLimitedUntil > Date.now();
+    const daysLeft = isRateLimited ? Math.ceil((rateLimitedUntil - Date.now()) / 86400000) : 0;
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: 16, padding: 24, textAlign: 'center' }}>
+        <span style={{ fontSize: 48 }}>🗺️</span>
+        {isRateLimited ? (
+          <>
+            <p style={{ color: 'var(--c-text)', fontWeight: 700, fontSize: 16 }}>Come back in {daysLeft} day{daysLeft !== 1 ? 's' : ''}</p>
+            <p style={{ color: 'var(--c-text-muted)', fontSize: 13 }}>Free users get a new set of quests each week. Upgrade to premium for unlimited refreshes.</p>
+          </>
+        ) : (
+          <>
+            <p style={{ color: 'var(--c-text)', fontWeight: 700, fontSize: 16 }}>No quests yet</p>
+            <p style={{ color: 'var(--c-text-muted)', fontSize: 13 }}>Tap below to generate personalised quests for your location.</p>
+            <button
+              onClick={() => refreshWeeklyQuests()}
+              style={{ marginTop: 8, padding: '12px 28px', borderRadius: 14, border: 'none', background: 'var(--c-green)', color: 'white', fontWeight: 800, fontSize: 15, cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              Generate My Quests
+            </button>
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: '12px 16px 100px', position: 'relative' }}>
