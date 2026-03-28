@@ -27,14 +27,19 @@ async function generateQuestsForUser(user: User) {
       body: JSON.stringify({ lat, lng }),
     });
 
-    if (res.ok) {
+    if (res.ok || res.status === 429) {
       const body = await res.json();
-      useGameStore.getState().applyGeneratedQuests({
-        solo:  body.quests?.solo  ?? [],
-        duo:   body.quests?.duo   ?? [],
-        trio:  body.quests?.trio  ?? [],
-        squad: body.quests?.squad ?? [],
-      });
+      if (body.quests) {
+        useGameStore.getState().applyGeneratedQuests({
+          solo:  body.quests?.solo  ?? [],
+          duo:   body.quests?.duo   ?? [],
+          trio:  body.quests?.trio  ?? [],
+          squad: body.quests?.squad ?? [],
+        });
+      }
+      if (res.status === 429 && body.retryAfter) {
+        useGameStore.getState().setRateLimitedUntil(body.retryAfter);
+      }
     }
   } catch {
     // Generation failed silently — user will see retry button

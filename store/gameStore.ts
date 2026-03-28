@@ -65,6 +65,7 @@ interface GameState {
   setDisplayName: (name: string) => void;
   setUserLocation: (lat: number, lng: number) => void;
   setQuestsGenerating: (v: boolean) => void;
+  setRateLimitedUntil: (v: number | null) => void;
   applyGeneratedQuests: (quests: { solo: Quest[]; duo: Quest[]; trio: Quest[]; squad: Quest[] }) => void;
   setActiveTab: (tab: string) => void;
   setQuestMode: (mode: QuestMode) => void;
@@ -264,6 +265,7 @@ export const useGameStore = create<GameState>()(
       setDisplayName: (displayName) => set({ displayName }),
       setUserLocation: (userLat, userLng) => set({ userLat, userLng }),
       setQuestsGenerating: (questsGenerating) => set({ questsGenerating }),
+      setRateLimitedUntil: (rateLimitedUntil) => set({ rateLimitedUntil }),
       applyGeneratedQuests: (quests) => set({
         weeklyQuests: quests.solo.map(q => ({ ...q, completed: false })),
         duoQuests:    quests.duo.map(q => ({ ...q, completed: false })),
@@ -458,6 +460,15 @@ export const useGameStore = create<GameState>()(
 
           if (res.status === 429) {
             set({ rateLimitedUntil: body.retryAfter });
+            // Apply existing quests returned in the 429 (avoids needing a Firestore client read)
+            if (body.quests) {
+              get().applyGeneratedQuests({
+                solo:  body.quests.solo  ?? [],
+                duo:   body.quests.duo   ?? [],
+                trio:  body.quests.trio  ?? [],
+                squad: body.quests.squad ?? [],
+              });
+            }
             return;
           }
 

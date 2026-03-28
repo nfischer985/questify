@@ -41,8 +41,16 @@ export async function POST(req: NextRequest) {
   if (!isPremium && !hasNoQuests && lastRegenAt) {
     const elapsed = Date.now() - lastRegenAt;
     if (elapsed < REGEN_COOLDOWN_MS) {
+      // Return existing quests in the 429 so the client can display them
+      // without needing a separate Firestore read
+      const existingQuests = {
+        solo:  userQuestsSnap.data()?.solo  ?? [],
+        duo:   userQuestsSnap.data()?.duo   ?? [],
+        trio:  userQuestsSnap.data()?.trio  ?? [],
+        squad: userQuestsSnap.data()?.squad ?? [],
+      };
       return NextResponse.json(
-        { error: 'Rate limited', retryAfter: lastRegenAt + REGEN_COOLDOWN_MS },
+        { error: 'Rate limited', retryAfter: lastRegenAt + REGEN_COOLDOWN_MS, quests: existingQuests },
         { status: 429 }
       );
     }
