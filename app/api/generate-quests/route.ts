@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
     lastRegenAt: ts,
   });
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, quests: byMode });
 }
 
 interface GeneratedQuest {

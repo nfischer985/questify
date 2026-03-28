@@ -65,6 +65,7 @@ interface GameState {
   setDisplayName: (name: string) => void;
   setUserLocation: (lat: number, lng: number) => void;
   setQuestsGenerating: (v: boolean) => void;
+  applyGeneratedQuests: (quests: { solo: Quest[]; duo: Quest[]; trio: Quest[]; squad: Quest[] }) => void;
   setActiveTab: (tab: string) => void;
   setQuestMode: (mode: QuestMode) => void;
   completeQuest: (questId: string, photoUrl?: string, duration?: number, timerBonus?: boolean) => { xpGained: number; coinsGained: number; newLevel: number };
@@ -263,6 +264,14 @@ export const useGameStore = create<GameState>()(
       setDisplayName: (displayName) => set({ displayName }),
       setUserLocation: (userLat, userLng) => set({ userLat, userLng }),
       setQuestsGenerating: (questsGenerating) => set({ questsGenerating }),
+      applyGeneratedQuests: (quests) => set({
+        weeklyQuests: quests.solo.map(q => ({ ...q, completed: false })),
+        duoQuests:    quests.duo.map(q => ({ ...q, completed: false })),
+        trioQuests:   quests.trio.map(q => ({ ...q, completed: false })),
+        squadQuests:  quests.squad.map(q => ({ ...q, completed: false })),
+        rateLimitedUntil: null,
+        weeklyQuestsCompleted: 0,
+      }),
       setActiveTab: (tab) => set({ activeTab: tab }),
       setQuestMode: (questMode) => set({ questMode }),
 
@@ -445,16 +454,22 @@ export const useGameStore = create<GameState>()(
             body: JSON.stringify({ lat, lng }),
           });
 
+          const body = await res.json();
+
           if (res.status === 429) {
-            const { retryAfter } = await res.json();
-            set({ rateLimitedUntil: retryAfter });
+            set({ rateLimitedUntil: body.retryAfter });
             return;
           }
 
           if (!res.ok) return;
 
-          set({ rateLimitedUntil: null, weeklyQuestsCompleted: 0 });
-          await get().loadUserQuests(state.authUid);
+          // Apply quests directly from the response — no second Firestore read needed
+          get().applyGeneratedQuests({
+            solo:  body.quests?.solo  ?? [],
+            duo:   body.quests?.duo   ?? [],
+            trio:  body.quests?.trio  ?? [],
+            squad: body.quests?.squad ?? [],
+          });
         } catch {
           // Silently fail — user keeps current quests
         } finally {

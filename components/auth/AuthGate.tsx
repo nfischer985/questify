@@ -13,11 +13,10 @@ const ALLOWED_EMAILS = [
 initFirebaseAppCheck();
 
 async function generateQuestsForUser(user: User) {
-  const { setUserLocation, setQuestsGenerating, loadUserQuests } = useGameStore.getState();
+  const { setUserLocation, setQuestsGenerating } = useGameStore.getState();
   setQuestsGenerating(true);
 
   try {
-    // Try GPS first, fall back to IP geolocation
     const { lat, lng } = await getLocation();
     setUserLocation(lat, lng);
 
@@ -29,7 +28,13 @@ async function generateQuestsForUser(user: User) {
     });
 
     if (res.ok) {
-      await loadUserQuests(user.uid);
+      const body = await res.json();
+      useGameStore.getState().applyGeneratedQuests({
+        solo:  body.quests?.solo  ?? [],
+        duo:   body.quests?.duo   ?? [],
+        trio:  body.quests?.trio  ?? [],
+        squad: body.quests?.squad ?? [],
+      });
     }
   } catch {
     // Generation failed silently — user will see retry button
