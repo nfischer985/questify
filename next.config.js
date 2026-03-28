@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
   // Additional security headers applied at the CDN/static-asset level.
   // The middleware.ts covers page-level requests; these headers catch
   // static files that middleware may not match.
