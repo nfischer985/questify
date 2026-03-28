@@ -1,7 +1,13 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { auth, initFirebaseAppCheck } from '@/lib/firebase';
+
+const ALLOWED_EMAILS = [
+  'hendrik.fischer@gmail.com',
+  'nfischer985@gmail.com',
+  'ericfischer427@gmail.com',
+];
 
 initFirebaseAppCheck();
 import { getProfileByUid } from '@/lib/userDb';
@@ -81,12 +87,17 @@ function LeaderboardSync() {
 
 function AuthGateInner({ children }: { children: React.ReactNode }) {
   const { userHandle, setUserHandle, setDisplayName, setAuthUid } = useGameStore();
-  const [firebaseUser, setFirebaseUser] = useState<User | null | 'loading'>('loading');
+  const [firebaseUser, setFirebaseUser] = useState<User | null | 'loading' | 'denied'>('loading');
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         setFirebaseUser(null);
+        return;
+      }
+      if (!ALLOWED_EMAILS.includes(user.email ?? '')) {
+        await signOut(auth);
+        setFirebaseUser('denied');
         return;
       }
       setAuthUid(user.uid);
@@ -124,6 +135,16 @@ function AuthGateInner({ children }: { children: React.ReactNode }) {
     );
   }
 
+  if (firebaseUser === 'denied') return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      height: '100dvh', background: 'var(--c-bg)', gap: 12, padding: 24, textAlign: 'center',
+    }}>
+      <span style={{ fontSize: 48 }}>🚫</span>
+      <p style={{ color: 'var(--c-text)', fontSize: 18, fontWeight: 600 }}>Access denied</p>
+      <p style={{ color: 'var(--c-text-muted)', fontSize: 14 }}>Your account is not on the invite list.</p>
+    </div>
+  );
   if (!firebaseUser) return <SignInScreen />;
   if (!userHandle)   return <UsernameSetup firebaseUser={firebaseUser} />;
 
