@@ -10,6 +10,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
+import { getLocation } from '@/lib/geolocation';
 
 const ZombieGame = dynamic(() => import('./ZombieGame'), { ssr: false });
 
@@ -434,17 +435,22 @@ export default function MapComponent() {
 
   const userPosRef = useRef<[number, number] | null>(null);
   const [coinDrops, setCoinDrops] = useState<CoinDrop[]>([]);
+
+  // Generate coins as soon as the map opens using the same GPS+IP fallback used for quests
+  useEffect(() => {
+    getLocation()
+      .then(({ lat, lng }) => generateCoinDropsNearUser(lat, lng))
+      .then(setCoinDrops)
+      .catch(() => {});
+  }, []);
+
   const [navTarget, setNavTarget] = useState<NavTarget | null>(null);
   const [navRoute,  setNavRoute]  = useState<NavRoute  | null>(null);
   const [navLoading, setNavLoading] = useState(false);
   const [navError,   setNavError]   = useState<string | null>(null);
 
   const handleLocationUpdate = useCallback((pos: [number, number]) => {
-    const first = userPosRef.current === null;
     userPosRef.current = pos;
-    if (first) {
-      generateCoinDropsNearUser(pos[0], pos[1]).then(setCoinDrops).catch(() => {});
-    }
   }, []);
 
   const startNavigation = useCallback(async (
