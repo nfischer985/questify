@@ -63,7 +63,7 @@ const SECURITY_HEADERS: Record<string, string> = {
   'Referrer-Policy': 'strict-origin-when-cross-origin',
 
   // Restrict browser features not used by this app
-  'Permissions-Policy': 'camera=(), microphone=()',
+  'Permissions-Policy': 'camera=(self), microphone=()',
 
   // Force HTTPS for 2 years once the site is visited over HTTPS
   'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
