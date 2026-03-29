@@ -100,15 +100,15 @@ function ActivityListener() {
 
 function LeaderboardSync() {
   const {
-    authUid, username, displayName, level, xp, coins, streak,
+    authUid, userHandle, displayName, level, xp, coins, streak,
     totalQuestsCompleted, weeklyQuestsCompleted, premium, avatarUrl,
   } = useGameStore();
 
   useEffect(() => {
-    if (!authUid || !username) return;
+    if (!authUid || !userHandle) return;
     upsertLeaderboardEntry(authUid, {
-      username,
-      displayName: displayName || username,
+      username: userHandle,
+      displayName: displayName || userHandle,
       level,
       xp,
       totalXp: computeTotalXp(level, xp),
@@ -119,7 +119,7 @@ function LeaderboardSync() {
       premium,
       avatarUrl: avatarUrl ?? null,
     }).catch(() => {});
-  }, [authUid, username, displayName, level, xp, coins, streak, totalQuestsCompleted, weeklyQuestsCompleted, premium, avatarUrl]);
+  }, [authUid, userHandle, displayName, level, xp, coins, streak, totalQuestsCompleted, weeklyQuestsCompleted, premium, avatarUrl]);
 
   return null;
 }
