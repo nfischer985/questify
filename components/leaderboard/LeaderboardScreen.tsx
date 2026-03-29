@@ -203,7 +203,7 @@ export default function LeaderboardScreen() {
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 700, color: '#e8f0e8', fontSize: 14 }}>{entry.username}</span>
+                    <span style={{ fontWeight: 700, color: '#e8f0e8', fontSize: 14 }}>{entry.displayName || entry.username || '?'}</span>
                     {entry.premium && <span style={{ fontSize: 12 }}>🧭</span>}
                     {entry.isMe && (
                       <span style={{
@@ -265,7 +265,7 @@ export default function LeaderboardScreen() {
         {/* Player count footer */}
         {!loading && list.length > 0 && tab !== 'friends' && (
           <p style={{ fontSize: 11, color: '#3d5545', textAlign: 'center', marginTop: 8 }}>
-            {list.length} adventurer{list.length !== 1 ? 's' : ''} ranked · updates live
+            {list.length} player{list.length !== 1 ? 's' : ''} ranked · updates live
           </p>
         )}
       </div>

@@ -95,6 +95,19 @@ service cloud.firestore {
       allow write: if isAuthed() && partyCode.size() == 6;
     }
 
+    // ── /directMessages/{chatId}/messages/{msgId} ────────────────────────────
+    // 1-on-1 friend chat. chatId is "{uid1}_{uid2}" (lexicographically sorted).
+    // Only participants may read or write; messages are immutable once sent.
+    match /directMessages/{chatId}/messages/{msgId} {
+      allow read: if isAuthed() && chatId.matches('(^|.*_)' + request.auth.uid + '(_.*|$)');
+      allow create: if isAuthed()
+        && chatId.matches('(^|.*_)' + request.auth.uid + '(_.*|$)')
+        && request.resource.data.uid == request.auth.uid
+        && isStr(request.resource.data.text, 500)
+        && request.resource.data.createdAt is int;
+      allow update, delete: if false;
+    }
+
     // ── /questTemplates/{id} ─────────────────────────────────────────────────
     // Admin-curated templates. Read-only for all authenticated users.
     match /questTemplates/{id} {

@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useGameStore } from '@/store/gameStore';
 import { subscribeToPartyChat, sendChatMessage } from '@/lib/partyChat';
+import { subscribeToDirectChat, sendDirectMessage, getChatId } from '@/lib/directChat';
 import { getActivity } from '@/lib/activityDb';
 import { saveParty, fetchParty } from '@/lib/partiesDb';
 import { ChatMessage, ActivityItem, Friend } from '@/types';
@@ -104,6 +105,11 @@ export default function ProfileScreen() {
   const [chatInput, setChatInput] = useState('');
   const [viewFriend, setViewFriend] = useState<Friend | null>(null);
   const [friendActivity, setFriendActivity] = useState<ActivityItem[]>([]);
+  const [showFriendChat, setShowFriendChat] = useState(false);
+  const [directMessages, setDirectMessages] = useState<ChatMessage[]>([]);
+  const [directChatInput, setDirectChatInput] = useState('');
+  const [directChatError, setDirectChatError] = useState('');
+  const directChatEndRef = useRef<HTMLDivElement>(null);
   const [joiningParty, setJoiningParty] = useState(false);
   const xpPct = Math.min((xp / xpToNextLevel) * 100, 100);
   const rank = getRankTitle(level);
@@ -176,6 +182,32 @@ export default function ProfileScreen() {
     getActivity(viewFriend.id).then(setFriendActivity);
   }, [viewFriend]);
 
+  // Subscribe to direct chat when open
+  useEffect(() => {
+    if (!viewFriend || !authUid || !showFriendChat) return;
+    const chatId = getChatId(authUid, viewFriend.id);
+    return subscribeToDirectChat(chatId, setDirectMessages);
+  }, [viewFriend, authUid, showFriendChat]);
+
+  // Auto-scroll direct chat
+  useEffect(() => {
+    if (showFriendChat) directChatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [directMessages, showFriendChat]);
+
+  const handleSendDirect = async () => {
+    if (!directChatInput.trim() || !viewFriend || !authUid || !userHandle) return;
+    const text = directChatInput.trim();
+    setDirectChatInput('');
+    try {
+      const chatId = getChatId(authUid, viewFriend.id);
+      await sendDirectMessage(chatId, authUid, userHandle, text);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Could not send.';
+      setDirectChatError(msg);
+      setTimeout(() => setDirectChatError(''), 4000);
+    }
+  };
+
   const [chatError, setChatError] = useState('');
 
   const handleSendChat = async () => {
@@ -229,7 +261,7 @@ export default function ProfileScreen() {
   if (viewFriend) return (
     <div style={{ paddingBottom: 100 }}>
       <button
-        onClick={() => setViewFriend(null)}
+        onClick={() => { setViewFriend(null); setShowFriendChat(false); setDirectMessages([]); }}
         style={{
           display: 'flex', alignItems: 'center', gap: 6,
           padding: '14px 16px 4px', background: 'none', border: 'none',
@@ -260,22 +292,99 @@ export default function ProfileScreen() {
           </div>
         </div>
 
-        {/* Recent activity */}
-        <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--c-t3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Recent Activity</p>
-        {friendActivity.length === 0
-          ? <div style={{ background: 'var(--c-card)', border: '1px solid var(--c-border-s)', borderRadius: 14, padding: '24px', textAlign: 'center' }}>
-              <p style={{ color: 'var(--c-t3)', fontSize: 13 }}>No recent activity yet.</p>
+        {/* Tab toggle: Activity / Chat */}
+        <div style={{ display: 'flex', background: 'var(--c-elevated)', border: '1px solid var(--c-border)', borderRadius: 10, padding: 3, gap: 3, marginBottom: 12 }}>
+          {(['activity', 'chat'] as const).map(t => (
+            <button key={t} onClick={() => setShowFriendChat(t === 'chat')} style={{
+              flex: 1, padding: '8px 0', borderRadius: 7, border: 'none', cursor: 'pointer',
+              fontWeight: 700, fontSize: 13, fontFamily: 'inherit',
+              background: (t === 'chat') === showFriendChat ? 'var(--c-green)' : 'transparent',
+              color: (t === 'chat') === showFriendChat ? 'white' : 'var(--c-t3)',
+            }}>
+              {t === 'activity' ? '⚔️ Activity' : '💬 Chat'}
+            </button>
+          ))}
+        </div>
+
+        {!showFriendChat && (
+          <>
+            {friendActivity.length === 0
+              ? <div style={{ background: 'var(--c-card)', border: '1px solid var(--c-border-s)', borderRadius: 14, padding: '24px', textAlign: 'center' }}>
+                  <p style={{ color: 'var(--c-t3)', fontSize: 13 }}>No recent activity yet.</p>
+                </div>
+              : friendActivity.map((item, i) => (
+                <div key={i} style={{ background: 'var(--c-card)', border: '1px solid var(--c-border-s)', borderRadius: 12, padding: '12px 14px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <p style={{ fontWeight: 700, color: 'var(--c-t1)', fontSize: 14, marginBottom: 2 }}>{item.questTitle}</p>
+                    <p style={{ fontSize: 12, color: 'var(--c-t3)' }}>{new Date(item.timestamp).toLocaleDateString()}</p>
+                  </div>
+                  <span style={{ fontWeight: 800, color: 'var(--c-green)', fontSize: 13 }}>+{item.xpGained} XP</span>
+                </div>
+              ))
+            }
+          </>
+        )}
+
+        {showFriendChat && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            {/* Message list */}
+            <div style={{
+              background: 'var(--c-card)', border: '1px solid var(--c-border-s)',
+              borderRadius: 14, padding: '12px', marginBottom: 10,
+              minHeight: 180, maxHeight: 340, overflowY: 'auto',
+              display: 'flex', flexDirection: 'column', gap: 8,
+            }}>
+              {directMessages.length === 0 && (
+                <p style={{ color: 'var(--c-t3)', fontSize: 13, textAlign: 'center', margin: 'auto' }}>
+                  No messages yet. Say hi!
+                </p>
+              )}
+              {directMessages.map((msg, i) => {
+                const isMe = msg.uid === authUid;
+                return (
+                  <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
+                    <div style={{
+                      maxWidth: '78%', padding: '8px 12px', borderRadius: isMe ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
+                      background: isMe ? 'var(--c-green)' : 'var(--c-elevated)',
+                      color: isMe ? 'white' : 'var(--c-t1)',
+                      fontSize: 14, fontWeight: 500, lineHeight: 1.4,
+                    }}>{msg.text}</div>
+                    <span style={{ fontSize: 10, color: 'var(--c-t3)', marginTop: 2, padding: '0 4px' }}>
+                      {isMe ? 'You' : msg.username}
+                    </span>
+                  </div>
+                );
+              })}
+              <div ref={directChatEndRef} />
             </div>
-          : friendActivity.map((item, i) => (
-            <div key={i} style={{ background: 'var(--c-card)', border: '1px solid var(--c-border-s)', borderRadius: 12, padding: '12px 14px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <p style={{ fontWeight: 700, color: 'var(--c-t1)', fontSize: 14, marginBottom: 2 }}>{item.questTitle}</p>
-                <p style={{ fontSize: 12, color: 'var(--c-t3)' }}>{new Date(item.timestamp).toLocaleDateString()}</p>
-              </div>
-              <span style={{ fontWeight: 800, color: 'var(--c-green)', fontSize: 13 }}>+{item.xpGained} XP</span>
+            {/* Input */}
+            {directChatError && <p style={{ fontSize: 12, color: '#ef4444', marginBottom: 6, textAlign: 'center' }}>{directChatError}</p>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                value={directChatInput}
+                onChange={e => setDirectChatInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSendDirect()}
+                placeholder={`Message ${viewFriend.username}…`}
+                maxLength={500}
+                style={{
+                  flex: 1, padding: '10px 14px', borderRadius: 10,
+                  background: 'var(--c-card)', border: '1px solid var(--c-border)',
+                  color: 'var(--c-t1)', fontSize: 14, outline: 'none', fontFamily: 'inherit',
+                }}
+              />
+              <button
+                onClick={handleSendDirect}
+                disabled={!directChatInput.trim()}
+                style={{
+                  padding: '10px 14px', borderRadius: 10, border: 'none',
+                  background: directChatInput.trim() ? 'var(--c-green)' : 'var(--c-elevated)',
+                  cursor: directChatInput.trim() ? 'pointer' : 'default',
+                  display: 'flex', alignItems: 'center',
+                }}
+              ><Send size={18} color="white" /></button>
             </div>
-          ))
-        }
+          </div>
+        )}
       </div>
     </div>
   );
