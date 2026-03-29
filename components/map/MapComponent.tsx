@@ -478,11 +478,16 @@ export default function MapComponent() {
   }, []);
 
   const fetchUrbex = async () => {
-    if (urbexFetched.current) return;
+    if (urbexFetched.current && urbexLocs.length > 0) return;
     urbexFetched.current = true;
     setUrbexLoading(true);
     try {
-      const query = `[out:json][timeout:30][bbox:26.63,-84.48,29.53,-81.08];(node["abandoned:building"];node["building"="abandoned"];node["historic"="ruins"];node["disused:building"];node["ruins"="yes"];way["abandoned:building"];way["building"="abandoned"];way["historic"="ruins"];way["disused:building"];way["ruins"="yes"];);out center 300;`;
+      // Get user's current location for a dynamic bounding box (~50 mile radius)
+      const { lat, lng } = await getLocation();
+      const delta = 0.75; // ~50 miles
+      const south = lat - delta, north = lat + delta;
+      const west  = lng - delta, east  = lng + delta;
+      const query = `[out:json][timeout:30][bbox:${south},${west},${north},${east}];(node["abandoned:building"];node["building"="abandoned"];node["historic"="ruins"];node["disused:building"];node["ruins"="yes"];way["abandoned:building"];way["building"="abandoned"];way["historic"="ruins"];way["disused:building"];way["ruins"="yes"];);out center 300;`;
       const res = await fetch('https://overpass-api.de/api/interpreter', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -491,12 +496,12 @@ export default function MapComponent() {
       const data = await res.json();
       const locs: UrbexLocation[] = [];
       for (const el of data.elements || []) {
-        const lat = el.lat ?? el.center?.lat;
-        const lng = el.lon ?? el.center?.lon;
-        if (!lat || !lng) continue;
+        const elLat = el.lat ?? el.center?.lat;
+        const elLng = el.lon ?? el.center?.lon;
+        if (!elLat || !elLng) continue;
         locs.push({
           id: String(el.id),
-          lat, lng,
+          lat: elLat, lng: elLng,
           name: el.tags?.name
             ? el.tags.name
             : el.tags?.['addr:street']
